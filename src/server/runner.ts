@@ -20,6 +20,7 @@ export function createRunner(store: Store, adapter: Adapter) {
    if(text.length>task.limits.maxInputChars) throw new ExecutionError('input_limit');
    const result=await adapter.run(task,text,{
     signal:current.controller.signal,
+    history:store.messages(task.conversationId).slice(0,store.messages(task.conversationId).findIndex(m=>m.id===task.sourceMessageId)),
     beforeRequest(){ if(current.controller.signal.aborted || fatal) throw new ExecutionError(current.reason??'recording_failed'); gate.beforeRequest(); },
     emit(type,payload){
      if(current.controller.signal.aborted) return;
