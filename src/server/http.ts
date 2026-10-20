@@ -36,7 +36,7 @@ export function createServer(store:Store,runner:Runner,adapter:Adapter,options:{
      const [,id,kind]=conversation;if(!store.hasConversation(id))throw new HttpError(404,'not_found');
      if(method==='GET'){
       if(kind==='messages')return json(res,200,store.messages(id));
-      if(kind==='tasks')return json(res,200,store.tasks(id));
+      if(kind==='tasks')return json(res,200,store.tasks(id).map(task=>({...task,result:store.result(task.id)})));
       const after=Number(url.searchParams.get('after')??'0');if(!Number.isSafeInteger(after)||after<0)throw new HttpError(400,'invalid_input');
       return json(res,200,store.events(id,after));
      }

@@ -9,7 +9,7 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "dev": "tsx src/server/main.ts",
+    "dev": "tsx src/server/main.ts --dev",
     "build": "vite build",
     "start": "tsx src/server/main.ts",
     "test:e2e": "playwright test"
