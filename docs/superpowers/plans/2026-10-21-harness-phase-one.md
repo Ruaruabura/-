@@ -1,6 +1,6 @@
 # Personal Agent Harness Phase One Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 交付本地中文文字聊天工作台，以 Pi 执行任务并可靠保留原话、状态和成果。
 
@@ -59,11 +59,11 @@
 - `Store.complete(id: string, result: Result): void`
 - `Store.recoverInterrupted(): number`、`Store.close(): void`
 
-- [ ] 写 `tests/store.test.ts`：提交后恰有一个用户消息和 queued 任务；重复相同 clientId 返回同一个 task.id；不同正文重用返回冲突；事件 seq 严格递增；事务失败不留下半条记录；关闭重开仍能读取原文。
-- [ ] 建立仅供这些测试运行的 TypeScript/Vitest 配置，运行 `npx vitest run tests/store.test.ts`，确认因缺失实现失败。
-- [ ] 实现 SQLite 迁移、外键、事务和参数绑定。终态写入与助手消息、result、事件同一事务完成；非法状态变更拒绝。迁移保留已有数据，不能删除数据库重建。
-- [ ] 运行同一测试，确认全部通过，并以真实临时磁盘数据库验证重开与 interrupted 恢复。
-- [ ] 提交 `feat: persist conversations tasks and ordered events`。
+- [x] 写 `tests/store.test.ts`：提交后恰有一个用户消息和 queued 任务；重复相同 clientId 返回同一个 task.id；不同正文重用返回冲突；事件 seq 严格递增；事务失败不留下半条记录；关闭重开仍能读取原文。
+- [x] 建立仅供这些测试运行的 TypeScript/Vitest 配置，运行 `npx vitest run tests/store.test.ts`，确认因缺失实现失败。
+- [x] 实现 SQLite 迁移、外键、事务和参数绑定。终态写入与助手消息、result、事件同一事务完成；非法状态变更拒绝。迁移保留已有数据，不能删除数据库重建。
+- [x] 运行同一测试，确认全部通过，并以真实临时磁盘数据库验证重开与 interrupted 恢复。
+- [x] 提交 `feat: persist conversations tasks and ordered events`。
 
 ## Task 2: 串行任务执行、用量闸门与取消
 
@@ -75,12 +75,12 @@
 - `createGate(limits: Limits, now: () => number): { beforeRequest(): void }`
 - `createRunner(store: Store, adapter: Adapter): { wake(): void; cancel(id: string): Promise<void>; resume(id: string): void; stop(): Promise<void> }`
 
-- [ ] 写测试：并发峰值为 1；第 4 次 beforeRequest 抛出限制错误；20,001 字符被阻断；120,000 ms 超时触发 abort；缺认证及额度错误变 paused；未知错误变 failed。
-- [ ] 增加取消排队、取消执行、迟到输出、abort 不完成不释放槽位、记录写入失败停止执行、重启只暂停不重放测试。
-- [ ] 运行 `npx vitest run tests/runner.test.ts`，确认实现缺失导致失败。
-- [ ] 实现执行器和闸门，测试使用可控时钟和可控 Promise。仅有显式恢复可重排 paused；中断期间保留 running 并记录取消请求，确认退出后才标 cancelled。
-- [ ] 运行上述测试及 store 测试，确认通过。
-- [ ] 提交 `feat: enforce task lifecycle and execution limits`。
+- [x] 写测试：并发峰值为 1；第 4 次 beforeRequest 抛出限制错误；20,001 字符被阻断；120,000 ms 超时触发 abort；缺认证及额度错误变 paused；未知错误变 failed。
+- [x] 增加取消排队、取消执行、迟到输出、abort 不完成不释放槽位、记录写入失败停止执行、重启只暂停不重放测试。
+- [x] 运行 `npx vitest run tests/runner.test.ts`，确认实现缺失导致失败。
+- [x] 实现执行器和闸门，测试使用可控时钟和可控 Promise。仅有显式恢复可重排 paused；中断期间保留 running 并记录取消请求，确认退出后才标 cancelled。
+- [x] 运行上述测试及 store 测试，确认通过。
+- [x] 提交 `feat: enforce task lifecycle and execution limits`。
 
 ## Task 3: 真实 Pi 订阅适配器
 
@@ -88,13 +88,13 @@
 
 **Interfaces:** 实现任务 2 的 Adapter；`createPiAdapter(config: { workspace: string; authDir: string }): Adapter`。只读工具 `readWorkspaceFile(relativePath: string): Promise<string>` 限制到配置的工作目录及剩余材料预算。
 
-- [ ] 阅读 Pi 官方发布、SDK 文档与包类型，记录包名、固定版本、ChatGPT 官方登录方式、逐请求 hook、中断及禁用重试方式到 `docs/pi-connection.md`。若 SDK 不支持逐请求闸门，采用设计允许的单次请求路径并关闭多步工具循环。
-- [ ] 写契约测试：只接受核验的订阅 provider；API key 路径不能启用；每次实际请求前调用 beforeRequest；abort 传播；排除隐藏推理和原始认证错误；错误归一化为认证、额度、超时或执行错误。
-- [ ] 写只读工具测试：拒绝绝对路径、`../`、指向工作目录外的符号链接和超预算文件；允许目录内受限读取。
-- [ ] 运行 `npx vitest run tests/pi-adapter.test.ts`，确认失败。
-- [ ] 使用核验过的 SDK 实现适配器；禁用默认高权限工具、后台压缩调用及隐式重试，或确保其模型请求都通过闸门。无法保证时不启用该能力。未知剩余额度保持 null；未验证账号不得返回 available。
-- [ ] 运行契约测试和类型检查，确认通过。真实登录仅使用官方流程，不读取或输出凭证内容。
-- [ ] 提交 `feat: integrate guarded Pi subscription adapter`。
+- [x] 阅读 Pi 官方发布、SDK 文档与包类型，记录包名、固定版本、ChatGPT 官方登录方式、逐请求 hook、中断及禁用重试方式到 `docs/pi-connection.md`。若 SDK 不支持逐请求闸门，采用设计允许的单次请求路径并关闭多步工具循环。
+- [x] 写契约测试：只接受核验的订阅 provider；API key 路径不能启用；每次实际请求前调用 beforeRequest；abort 传播；排除隐藏推理和原始认证错误；错误归一化为认证、额度、超时或执行错误。
+- [x] 写只读工具测试：拒绝绝对路径、`../`、指向工作目录外的符号链接和超预算文件；允许目录内受限读取。
+- [x] 运行 `npx vitest run tests/pi-adapter.test.ts`，确认失败。
+- [x] 使用核验过的 SDK 实现适配器；禁用默认高权限工具、后台压缩调用及隐式重试，或确保其模型请求都通过闸门。无法保证时不启用该能力。未知剩余额度保持 null；未验证账号不得返回 available。
+- [x] 运行契约测试和类型检查，确认通过。真实登录仅使用官方流程，不读取或输出凭证内容。
+- [x] 提交 `feat: integrate guarded Pi subscription adapter`。
 
 ## Task 4: 本地 HTTP 服务
 
@@ -112,12 +112,12 @@ API 使用 JSON，错误为 `{ error: { code, message } }`：
 - `GET /api/tasks/:id`：Task 与可用结果。
 - `POST /api/tasks/:id/cancel`、`POST /api/tasks/:id/resume`：执行任务操作。
 
-- [ ] 写 HTTP 集成测试：无认证提交仍保存并最终 paused；幂等冲突为 409；非法正文为 400；超 128 KiB 请求为 413；未知资源为 404；数据库失败为明确 503；跨域 Origin 和异常 Host 被拒绝。
-- [ ] 运行 `npx vitest run tests/http.test.ts`，确认失败。
-- [ ] 实现 JSON 限制、ID 校验、分页、loopback 绑定、同源校验和静态构建资源托管。开发期 Vite 使用同源代理；数据库与工作目录从环境变量读取，示例不含凭证。
-- [ ] 启动时执行迁移及 interrupted 恢复；退出时停止接收新任务并等待中断，然后关闭数据库。确认单进程运行；第二个实例不得同时消费队列。
-- [ ] 运行 HTTP 测试与已有测试，确认通过。
-- [ ] 提交 `feat: expose local task and conversation API`。
+- [x] 写 HTTP 集成测试：无认证提交仍保存并最终 paused；幂等冲突为 409；非法正文为 400；超 128 KiB 请求为 413；未知资源为 404；数据库失败为明确 503；跨域 Origin 和异常 Host 被拒绝。
+- [x] 运行 `npx vitest run tests/http.test.ts`，确认失败。
+- [x] 实现 JSON 限制、ID 校验、分页、loopback 绑定、同源校验和静态构建资源托管。开发期 Vite 使用同源代理；数据库与工作目录从环境变量读取，示例不含凭证。
+- [x] 启动时执行迁移及 interrupted 恢复；退出时停止接收新任务并等待中断，然后关闭数据库。确认单进程运行；第二个实例不得同时消费队列。
+- [x] 运行 HTTP 测试与已有测试，确认通过。
+- [x] 提交 `feat: expose local task and conversation API`。
 
 ## Task 5: 中文聊天与工作记录界面
 
@@ -125,24 +125,26 @@ API 使用 JSON，错误为 `{ error: { code, message } }`：
 
 **Interfaces:** `api.ts` 封装任务 4 的 API；React 组件仅接收公共 DTO，不导入 server 模块。
 
-- [ ] 写浏览器测试：输入并发送、暂停原因、取消、刷新恢复、工作记录顺序；失败保留草稿，成功清空；快速切换会话不串数据；发送超时重试沿用 clientId。
-- [ ] 运行 `npx playwright test`，确认因界面未实现失败。
-- [ ] 实现中文聊天和工作记录双视图、会话列表、连接状态及任务操作；每秒轮询活动任务，卸载或切换时取消请求；事件按 seq 去重。
-- [ ] 使用语义化按钮、标签、键盘提交和可读错误提示；明确显示未知额度，未实现的附件和语音不放可点击入口。
-- [ ] 运行浏览器测试，验证窄屏与桌面布局，确认关键操作可键盘完成。
-- [ ] 提交 `feat: add chat and work timeline interface`。
+- [x] 写浏览器测试：输入并发送、暂停原因、取消、刷新恢复、工作记录顺序；失败保留草稿，成功清空；快速切换会话不串数据；发送超时重试沿用 clientId。
+- [x] 运行 `npx playwright test`，确认因界面未实现失败。
+- [x] 实现中文聊天和工作记录双视图、会话列表、连接状态及任务操作；每秒轮询活动任务，卸载或切换时取消请求；事件按 seq 去重。
+- [x] 使用语义化按钮、标签、键盘提交和可读错误提示；明确显示未知额度，未实现的附件和语音不放可点击入口。
+- [x] 运行浏览器测试，验证窄屏与桌面布局，确认关键操作可键盘完成。
+- [x] 提交 `feat: add chat and work timeline interface`。
 
 ## Task 6: 完整验收与交付说明
 
 **Files:** 更新 `README.md`、`package.json`、`docs/pi-connection.md`；创建 `docs/acceptance.md`。
 
-- [ ] 添加并验证 `npm run dev`、`npm run build`、`npm start`、`npm run typecheck`、`npm test`、`npm run test:e2e`；说明 Node 24、数据目录、启动关闭和官方认证流程。
-- [ ] 执行 `npm ci` 验证 lockfile 可复现，然后运行类型检查、全体单元/集成测试、生产构建及浏览器测试；记录实际测试数量与结果。
-- [ ] 启动生产服务，实际提交消息，验证无认证暂停、查询记录和取消；重启并核对数据库原文仍在，遗留运行任务不会自动重放。
-- [ ] 检查现有认证的名称和可用状态；有合法可用订阅时运行小型真实任务。没有账号条件时将真实连接标为未执行，并给出用户本地登录后的精确验收步骤，不以测试替身代替。
-- [ ] 自查所有设计条目、凭证排除、工具边界和异常路径，完成独立代码审查并处理发现的问题。
-- [ ] 更新 `docs/acceptance.md`，区分软件通过项、真实账号验证项与后续阶段；提交 `docs: document setup and phase one acceptance`。
+- [x] 添加并验证 `npm run dev`、`npm run build`、`npm start`、`npm run typecheck`、`npm test`、`npm run test:e2e`；说明 Node 24、数据目录、启动关闭和官方认证流程。
+- [x] 执行 `npm ci` 验证 lockfile 可复现，然后运行类型检查、全体单元/集成测试、生产构建及浏览器测试；记录实际测试数量与结果。
+- [x] 启动生产服务，实际提交消息，验证无认证暂停、查询记录和取消；重启并核对数据库原文仍在，遗留运行任务不会自动重放。
+- [x] 检查现有认证的名称和可用状态；有合法可用订阅时运行小型真实任务。没有账号条件时将真实连接标为未执行，并给出用户本地登录后的精确验收步骤，不以测试替身代替。
+- [x] 自查所有设计条目、凭证排除、工具边界和异常路径，完成独立代码审查并处理发现的问题。
+- [x] 更新 `docs/acceptance.md`，区分软件通过项、真实账号验证项与后续阶段；提交 `docs: document setup and phase one acceptance`。
 
 ## 计划自审
 
 设计中的持久化、事件关联与恢复对应任务 1–2；认证与逐请求限制对应任务 3；本地访问边界对应任务 4；用户交互对应任务 5；可复现安装和真实验证对应任务 6。五项 Review Focus 均有归属测试。执行顺序依赖公共类型和接口，建议由当前会话顺序实现，完成后做独立审查。
+
+执行记录：所有六项任务的软件实现与本地验收已完成；真实订阅账号验证因无用户 OAuth 未执行，详见 `docs/acceptance.md`。独立审查及其修复记录在交付前补充。

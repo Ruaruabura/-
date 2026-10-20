@@ -3,8 +3,42 @@ export type Limits = { maxInputChars: number; maxRequests: number; timeoutMs: nu
 export const DEFAULT_LIMITS: Limits = { maxInputChars: 20_000, maxRequests: 3, timeoutMs: 120_000 };
 export type SubmitInput = { conversationId: string; clientId: string; text: string };
 export type Conversation = { id: string; title: string; createdAt: string };
-export type Message = { id: string; conversationId: string; taskId: string; role: 'user' | 'assistant'; text: string; createdAt: string };
-export type Task = { id: string; conversationId: string; sourceMessageId: string; status: TaskStatus; reason: string | null; limits: Limits; createdAt: string; updatedAt: string };
-export type Event = { seq: number; taskId: string | null; conversationId: string; type: string; payload: Record<string, unknown>; createdAt: string };
-export type Result = { text: string; scope: string; evidence: string[]; unfinished: string[]; externalSessionId: string | null };
-export type ConnectionStatus = { state: 'unconfigured' | 'unverified' | 'available' | 'paused'; reason: string | null; verifiedAt: string | null; remainingQuota: null };
+export type Message = {
+  id: string;
+  conversationId: string;
+  taskId: string;
+  role: 'user' | 'assistant';
+  text: string;
+  createdAt: string;
+};
+export type Task = {
+  id: string;
+  conversationId: string;
+  sourceMessageId: string;
+  status: TaskStatus;
+  reason: string | null;
+  limits: Limits;
+  createdAt: string;
+  updatedAt: string;
+};
+export type Event = {
+  seq: number;
+  taskId: string | null;
+  conversationId: string;
+  type: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+};
+export type Result = {
+  text: string;
+  scope: string;
+  evidence: string[];
+  unfinished: string[];
+  externalSessionId: string | null;
+};
+export type ConnectionStatus = {
+  state: 'unconfigured' | 'unverified' | 'available' | 'paused';
+  reason: string | null;
+  verifiedAt: string | null;
+  remainingQuota: null;
+};

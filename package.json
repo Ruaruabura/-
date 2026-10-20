@@ -12,7 +12,12 @@
     "dev": "tsx src/server/main.ts --dev",
     "build": "vite build",
     "start": "tsx src/server/main.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "login": "tsx src/server/account.ts login",
+    "account:status": "tsx src/server/account.ts status",
+    "verify:pi": "tsx src/server/account.ts verify",
+    "format:check": "prettier --check src tests *.ts *.json index.html",
+    "format": "prettier --write src tests *.ts *.json index.html"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
@@ -20,6 +25,7 @@
     "@types/proper-lockfile": "^4.1.4",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "prettier": "^3.9.10",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",

@@ -1,14 +1,133 @@
 import { useEffect, useRef } from 'react';
 import type { Message, Event } from '../shared/contracts.js';
 import type { TaskView } from './api.js';
-import { states,reasons,time } from './labels.js';
+import { states, reasons, time } from './labels.js';
 import { Icon } from './Icon.js';
-export function Chat({messages,tasks,events,onAction,onSuggest}:{messages:Message[];tasks:TaskView[];events:Event[];onAction:(task:TaskView,action:'cancel'|'resume')=>void;onSuggest:(text:string)=>void}){
- const end=useRef<HTMLDivElement>(null);useEffect(()=>{end.current?.scrollIntoView({block:'end'});},[messages.length]);
- if(!messages.length)return <section className="welcome"><div className="welcome-symbol"><Icon name="leaf" size={35}/></div><p className="eyebrow">YOUR PERSONAL WORKBENCH</p><h1>从一句想法，<br/>开始一次工作。</h1><p className="welcome-copy">把问题、想法或一段文字交给这里。<br/>每一步都有记录，每一次推进都有来处。</p><div className="suggestions"><button onClick={()=>onSuggest('帮我把这个想法拆成可执行的步骤：')}><span>梳理一个想法</span><small>从模糊的问题，找到下一步</small><span className="suggest-arrow">↗</span></button><button onClick={()=>onSuggest('请帮我整理下面这段文字，保留原意并列出待确认事项：')}><span>整理一段材料</span><small>保留原意，让要点更清楚</small><span className="suggest-arrow">↗</span></button></div><p className="welcome-foot"><span className="tiny-dot"/> 原话会被保留，发送后才开始处理</p></section>;
- return <div className="messages">{messages.map(message=>{
- const task=tasks.find(t=>t.id===message.taskId);const progress=events.filter(e=>e.taskId===message.taskId&&e.type==='visible.progress').at(-1);
- const cancelling=task?.status==='running'&&events.some(e=>e.taskId===task.id&&e.type==='task.cancel_requested');
- return <article key={message.id} className={`message ${message.role}`}><div className="message-avatar">{message.role==='user'?'我':<Icon name="leaf"/>}</div><div className="message-content"><div className="message-meta"><strong>{message.role==='user'?'你':'工作台'}</strong><time>{time(message.createdAt)}</time>{message.role==='user'&&<span>原始表达</span>}</div><div className="message-text">{message.text}</div>{message.role==='user'&&task&&<div className="task-block"><div className="task-line"><span className={`status ${task.status}`}><i/>{cancelling?'正在取消':states[task.status]}</span>{task.reason&&<span className="task-reason">{reasons[task.reason]??task.reason}</span>}{task.status==='paused'&&<button className="text-button" onClick={()=>onAction(task,'resume')}>恢复任务</button>}{['queued','running','paused'].includes(task.status)&&<button aria-label="取消任务" className="text-button muted" disabled={cancelling} onClick={()=>onAction(task,'cancel')}>取消</button>}</div>{task.status==='running'&&progress&&<p className="progress-text">{String(progress.payload.text)}</p>}</div>}{message.role==='assistant'&&task?.result&&<details className="coverage"><summary>本次处理范围</summary><p>{task.result.scope}</p>{task.result.evidence.length>0&&<ul>{task.result.evidence.map((e,i)=><li key={i}>{e}</li>)}</ul>}{task.result.unfinished.length>0&&<p>未完成：{task.result.unfinished.join('；')}</p>}</details>}</div></article>;
- })}<div ref={end}/></div>;
+export function Chat({
+  messages,
+  tasks,
+  events,
+  onAction,
+  onSuggest,
+}: {
+  messages: Message[];
+  tasks: TaskView[];
+  events: Event[];
+  onAction: (task: TaskView, action: 'cancel' | 'resume') => void;
+  onSuggest: (text: string) => void;
+}) {
+  const end = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: 'end' });
+  }, [messages.length]);
+  if (!messages.length)
+    return (
+      <section className="welcome">
+        <div className="welcome-symbol">
+          <Icon name="leaf" size={35} />
+        </div>
+        <p className="eyebrow">YOUR PERSONAL WORKBENCH</p>
+        <h1>
+          从一句想法，
+          <br />
+          开始一次工作。
+        </h1>
+        <p className="welcome-copy">
+          把问题、想法或一段文字交给这里。
+          <br />
+          每一步都有记录，每一次推进都有来处。
+        </p>
+        <div className="suggestions">
+          <button onClick={() => onSuggest('帮我把这个想法拆成可执行的步骤：')}>
+            <span>梳理一个想法</span>
+            <small>从模糊的问题，找到下一步</small>
+            <span className="suggest-arrow">↗</span>
+          </button>
+          <button onClick={() => onSuggest('请帮我整理下面这段文字，保留原意并列出待确认事项：')}>
+            <span>整理一段材料</span>
+            <small>保留原意，让要点更清楚</small>
+            <span className="suggest-arrow">↗</span>
+          </button>
+        </div>
+        <p className="welcome-foot">
+          <span className="tiny-dot" /> 原话会被保留，发送后才开始处理
+        </p>
+      </section>
+    );
+  return (
+    <div className="messages">
+      {messages.map((message) => {
+        const task = tasks.find((t) => t.id === message.taskId);
+        const progress = events
+          .filter((e) => e.taskId === message.taskId && e.type === 'visible.progress')
+          .at(-1);
+        const cancelling =
+          task?.status === 'running' &&
+          events.some((e) => e.taskId === task.id && e.type === 'task.cancel_requested');
+        return (
+          <article key={message.id} className={`message ${message.role}`}>
+            <div className="message-avatar">
+              {message.role === 'user' ? '我' : <Icon name="leaf" />}
+            </div>
+            <div className="message-content">
+              <div className="message-meta">
+                <strong>{message.role === 'user' ? '你' : '工作台'}</strong>
+                <time>{time(message.createdAt)}</time>
+                {message.role === 'user' && <span>原始表达</span>}
+              </div>
+              <div className="message-text">{message.text}</div>
+              {message.role === 'user' && task && (
+                <div className="task-block">
+                  <div className="task-line">
+                    <span className={`status ${task.status}`}>
+                      <i />
+                      {cancelling ? '正在取消' : states[task.status]}
+                    </span>
+                    {task.reason && (
+                      <span className="task-reason">{reasons[task.reason] ?? task.reason}</span>
+                    )}
+                    {task.status === 'paused' && (
+                      <button className="text-button" onClick={() => onAction(task, 'resume')}>
+                        恢复任务
+                      </button>
+                    )}
+                    {['queued', 'running', 'paused'].includes(task.status) && (
+                      <button
+                        aria-label="取消任务"
+                        className="text-button muted"
+                        disabled={cancelling}
+                        onClick={() => onAction(task, 'cancel')}
+                      >
+                        取消
+                      </button>
+                    )}
+                  </div>
+                  {task.status === 'running' && progress && (
+                    <p className="progress-text">{String(progress.payload.text)}</p>
+                  )}
+                </div>
+              )}
+              {message.role === 'assistant' && task?.result && (
+                <details className="coverage">
+                  <summary>本次处理范围</summary>
+                  <p>{task.result.scope}</p>
+                  {task.result.evidence.length > 0 && (
+                    <ul>
+                      {task.result.evidence.map((e, i) => (
+                        <li key={i}>{e}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {task.result.unfinished.length > 0 && (
+                    <p>未完成：{task.result.unfinished.join('；')}</p>
+                  )}
+                </details>
+              )}
+            </div>
+          </article>
+        );
+      })}
+      <div ref={end} />
+    </div>
+  );
 }
