@@ -5,6 +5,7 @@ export type ErrorCode =
   | 'quota'
   | 'input_limit'
   | 'request_limit'
+  | 'output_limit'
   | 'timeout'
   | 'cancelled'
   | 'interrupted'

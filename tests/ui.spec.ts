@@ -99,3 +99,38 @@ test('test adapter running task can be cancelled without a late result', async (
     page.locator('main').getByText('测试适配器结果：长任务', { exact: true }),
   ).toHaveCount(0);
 });
+
+for (const transition of ['reload', 'switch'] as const) {
+  test(`lost acknowledgement remains idempotent after ${transition}`, async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: '新建对话', exact: true }).click();
+    const text = `恢复发送测试-${transition}`,
+      ids: string[] = [];
+    let first = true;
+    await page.route('**/api/conversations/*/messages', async (route) => {
+      if (route.request().method() !== 'POST') return route.continue();
+      ids.push(route.request().postDataJSON().clientId);
+      if (first) {
+        first = false;
+        await route.fetch();
+        return route.abort();
+      }
+      return route.continue();
+    });
+    const input = page.getByRole('textbox', { name: '输入消息' });
+    await input.fill(text);
+    await page.getByRole('button', { name: '发送消息', exact: true }).click();
+    await expect(page.getByRole('alert')).toBeVisible();
+    if (transition === 'reload') await page.reload();
+    else {
+      await page.getByRole('button', { name: '新建对话', exact: true }).click();
+      await page.getByRole('button', { name: `切换对话：${text}`, exact: true }).click();
+    }
+    await expect(input).toHaveValue(text);
+    await page.getByRole('button', { name: '发送消息', exact: true }).click();
+    await expect(input).toHaveValue('');
+    expect(ids).toHaveLength(2);
+    expect(ids[1]).toBe(ids[0]);
+    await expect(page.locator('main').getByText(text, { exact: true })).toHaveCount(1);
+  });
+}

@@ -63,7 +63,7 @@ test('gates fourth request and deadline at exactly 120 seconds', () => {
   now = 120000;
   expect(() => timed.beforeRequest()).toThrow('timeout');
 });
-test.each(['auth_required', 'quota', 'request_limit'] as const)(
+test.each(['auth_required', 'quota', 'request_limit', 'output_limit'] as const)(
   'pauses on %s without retry',
   async (code) => {
     let attempts = 0;
@@ -228,4 +228,37 @@ test('cancellation acknowledges its own task without waiting for later unrelated
     finishSecond(result);
     await cancelling;
   }
+});
+
+test('queued follow-up receives the earlier task answer even when it was inserted later', async () => {
+  let finish!: (r: Result) => void;
+  let calls = 0;
+  let history: string[] = [];
+  const { c, t } = setup({
+    status: async () => available,
+    run: async (_t, _s, ctl) => {
+      calls++;
+      if (calls === 1)
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      history = (ctl.history ?? []).map((m) => m.text);
+      return result;
+    },
+  });
+  runner.wake();
+  await vi.waitFor(() => expect(calls).toBe(1));
+  const b = store.submit({
+    conversationId: c.id,
+    clientId: 'queued-followup',
+    text: '根据你的答案继续',
+  });
+  finish({ ...result, text: '前一条答案' });
+  await vi.waitFor(() => expect(store.getTask(b.id)?.status).toBe('completed'));
+  expect(history).toEqual([store.sourceText(t), '前一条答案']);
+});
+test('ordinary invalid transitions do not poison recording health', () => {
+  const { t } = setup({ status: async () => available, run: async () => result });
+  expect(() => runner.resume(t.id)).toThrow('invalid_transition');
+  expect(runner.health()).toBeNull();
 });

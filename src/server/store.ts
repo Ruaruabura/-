@@ -184,3 +184,11 @@ export class Store {
     }
   }
 }
+
+/** Expected state conflicts are not evidence of a broken recording backend. */
+export function isStoreConflict(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    ['not_found', 'invalid_transition', 'idempotency_conflict'].includes(error.message)
+  );
+}

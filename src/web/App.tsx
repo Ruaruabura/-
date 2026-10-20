@@ -16,7 +16,10 @@ function readLocal(key: string) {
 function saveLocal(key: string, value: string) {
   try {
     localStorage.setItem(key, value);
-  } catch {}
+    return true;
+  } catch {
+    return false;
+  }
 }
 export function App() {
   const [conversations, setConversations] = useState<Conversation[]>([]),
@@ -39,7 +42,18 @@ export function App() {
     saveLocal('harness:selected', id);
     setDraft(readLocal(`harness:draft:${id}`) ?? '');
     setError('');
-    pending.current = null;
+    try {
+      const saved = JSON.parse(readLocal(`harness:pending:${id}`) ?? 'null');
+      pending.current =
+        saved &&
+        saved.conversationId === id &&
+        typeof saved.id === 'string' &&
+        typeof saved.text === 'string'
+          ? saved
+          : null;
+    } catch {
+      pending.current = null;
+    }
   }
   useEffect(() => {
     let live = true;
@@ -125,10 +139,15 @@ export function App() {
       pending.current.conversationId !== target
     )
       pending.current = { id: crypto.randomUUID(), text, conversationId: target };
+    if (!saveLocal(`harness:pending:${target}`, JSON.stringify(pending.current))) {
+      setError('浏览器无法保存发送凭据，消息尚未发送。请释放本地存储后重试。');
+      return;
+    }
     setSending(true);
     setError('');
     try {
       await api.send(target, pending.current.id, text);
+      saveLocal(`harness:pending:${target}`, 'null');
       if (selectedRef.current === target) {
         edit('');
         pending.current = null;

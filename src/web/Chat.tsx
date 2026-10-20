@@ -102,7 +102,7 @@ export function Chat({
                       </button>
                     )}
                   </div>
-                  {task.status === 'running' && progress && (
+                  {(task.status === 'running' || task.reason === 'output_limit') && progress && (
                     <p className="progress-text">{String(progress.payload.text)}</p>
                   )}
                 </div>

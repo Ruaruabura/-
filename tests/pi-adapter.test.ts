@@ -226,3 +226,39 @@ test('official HTTP transport does not retry a subscription quota response', asy
     vi.unstubAllGlobals();
   }
 });
+
+test('symlink aliases cannot expose hidden files or hidden directories', async () => {
+  const cfg = config();
+  writeFileSync(join(cfg.workspace, '.env'), 'TEST_SECRET');
+  mkdirSync(join(cfg.workspace, '.credentials'));
+  writeFileSync(join(cfg.workspace, '.credentials', 'data.txt'), 'TEST_SECRET');
+  symlinkSync(join(cfg.workspace, '.env'), join(cfg.workspace, 'public.txt'));
+  symlinkSync(join(cfg.workspace, '.credentials'), join(cfg.workspace, 'public-dir'));
+  const read = createWorkspaceReader(cfg.workspace, 20000);
+  await expect(read('public.txt')).rejects.toThrow('path_denied');
+  await expect(read('public-dir/data.txt')).rejects.toThrow('path_denied');
+});
+test('token-truncated output is retained as visible progress but pauses without automatic retry', async () => {
+  let truncated = false,
+    calls = 0;
+  const events: string[] = [];
+  const adapter = createPiAdapter(config(), {
+    credentials: await oauth(),
+    stream: () => {
+      calls++;
+      const msg = message('部分回答');
+      if (truncated) msg.stopReason = 'length';
+      return stream(msg);
+    },
+  });
+  await adapter.verify();
+  truncated = true;
+  await expect(
+    adapter.run(task, 'hi', {
+      ...controls(),
+      emit: (type, payload) => events.push(type + JSON.stringify(payload)),
+    }),
+  ).rejects.toThrow('output_limit');
+  expect(calls).toBe(2);
+  expect(events.join('')).toContain('部分回答');
+});

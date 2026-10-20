@@ -1,7 +1,7 @@
 import { createServer as nodeServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
-import type { Store } from './store.js';
+import { isStoreConflict, type Store } from './store.js';
 import type { Runner } from './runner.js';
 import type { Adapter } from './adapter.js';
 type Middleware = (req: IncomingMessage, res: ServerResponse, next: () => void) => void;
@@ -54,6 +54,15 @@ export function createServer(
   adapter: Adapter,
   options: { staticDir?: string; middleware?: Middleware } = {},
 ) {
+  function database<T>(operation: () => T): T {
+    try {
+      return operation();
+    } catch (error) {
+      if (isStoreConflict(error)) throw error;
+      runner.recordingFailed();
+      throw new HttpError(503, 'recording_failed');
+    }
+  }
   const server = nodeServer(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
@@ -79,10 +88,19 @@ export function createServer(
         if (method === 'GET' && path === '/api/connection')
           return json(res, 200, await adapter.status());
         if (path === '/api/conversations') {
-          if (method === 'GET') return json(res, 200, store.conversations());
+          if (method === 'GET')
+            return json(
+              res,
+              200,
+              database(() => store.conversations()),
+            );
           if (method === 'POST') {
             await body(req);
-            return json(res, 201, store.createConversation());
+            return json(
+              res,
+              201,
+              database(() => store.createConversation()),
+            );
           }
         }
         const conversation = path.match(
@@ -90,19 +108,30 @@ export function createServer(
         );
         if (conversation) {
           const [, id, kind] = conversation;
-          if (!store.hasConversation(id)) throw new HttpError(404, 'not_found');
+          if (!database(() => store.hasConversation(id))) throw new HttpError(404, 'not_found');
           if (method === 'GET') {
-            if (kind === 'messages') return json(res, 200, store.messages(id));
+            if (kind === 'messages')
+              return json(
+                res,
+                200,
+                database(() => store.messages(id)),
+              );
             if (kind === 'tasks')
               return json(
                 res,
                 200,
-                store.tasks(id).map((task) => ({ ...task, result: store.result(task.id) })),
+                database(() =>
+                  store.tasks(id).map((task) => ({ ...task, result: store.result(task.id) })),
+                ),
               );
             const after = Number(url.searchParams.get('after') ?? '0');
             if (!Number.isSafeInteger(after) || after < 0)
               throw new HttpError(400, 'invalid_input');
-            return json(res, 200, store.events(id, after));
+            return json(
+              res,
+              200,
+              database(() => store.events(id, after)),
+            );
           }
           if (method === 'POST' && kind === 'messages') {
             const data = await body(req);
@@ -113,11 +142,13 @@ export function createServer(
               !data.text.trim()
             )
               throw new HttpError(400, 'invalid_input');
-            const task = store.submit({
-              conversationId: id,
-              clientId: data.clientId,
-              text: data.text,
-            });
+            const task = database(() =>
+              store.submit({
+                conversationId: id,
+                clientId: data.clientId as string,
+                text: data.text as string,
+              }),
+            );
             runner.wake();
             return json(res, 201, task);
           }
@@ -125,10 +156,10 @@ export function createServer(
         const taskRoute = path.match(/^\/api\/tasks\/([\w-]+)(?:\/(cancel|resume))?$/);
         if (taskRoute) {
           const [, id, action] = taskRoute,
-            task = store.getTask(id);
+            task = database(() => store.getTask(id));
           if (!task) throw new HttpError(404, 'not_found');
           if (method === 'GET' && !action)
-            return json(res, 200, { ...task, result: store.result(id) });
+            return json(res, 200, { ...task, result: database(() => store.result(id)) });
           if (method === 'POST' && action) {
             await body(req);
             if (action === 'cancel') {
@@ -138,7 +169,11 @@ export function createServer(
               void runner.cancel(id).catch(() => {});
             } else runner.resume(id);
             if (runner.health()) throw new HttpError(503, 'recording_failed');
-            return json(res, 202, store.getTask(id));
+            return json(
+              res,
+              202,
+              database(() => store.getTask(id)),
+            );
           }
         }
         throw new HttpError(404, 'not_found');

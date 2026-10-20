@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { request, type Server } from 'node:http';
 import { openStore, type Store } from '../src/server/store.js';
+import type { Adapter } from '../src/server/adapter.js';
 import { createRunner, type Runner } from '../src/server/runner.js';
 import { createServer } from '../src/server/http.js';
 import { acquireInstanceLock } from '../src/server/instance-lock.js';
@@ -8,9 +9,9 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 let store: Store, runner: Runner, server: Server, url: string;
-async function setup() {
+async function setup(provided?: Adapter) {
   store = openStore(':memory:');
-  const adapter = {
+  const adapter = provided ?? {
     status: async () => ({
       state: 'unconfigured' as const,
       reason: 'auth_required',
@@ -128,4 +129,53 @@ test('only one instance may consume a database, and lock releases cleanly', () =
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('HTTP storage failure aborts current execution and latches the queue closed', async () => {
+  let finish!: (r: import('../src/shared/contracts.js').Result) => void;
+  let signal: AbortSignal | undefined,
+    calls = 0;
+  const result = {
+    text: 'must not complete',
+    scope: '',
+    evidence: [],
+    unfinished: [],
+    externalSessionId: null,
+  };
+  await setup({
+    status: async () => ({
+      state: 'available',
+      reason: null,
+      verifiedAt: 'now',
+      remainingQuota: null,
+    }),
+    run: async (_t, _s, ctl) => {
+      calls++;
+      signal = ctl.signal;
+      if (calls > 1) return result;
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    },
+  });
+  const c = store.createConversation(),
+    a = store.submit({ conversationId: c.id, clientId: 'active', text: 'active' }),
+    b = store.submit({ conversationId: c.id, clientId: 'waiting', text: 'waiting' });
+  runner.wake();
+  await vi.waitFor(() => expect(calls).toBe(1));
+  vi.spyOn(store, 'createConversation').mockImplementation(() => {
+    throw Error('SQLITE_FULL');
+  });
+  try {
+    expect((await post('/api/conversations', {})).status).toBe(503);
+    expect(runner.health()).toBe('recording_failed');
+    expect(signal?.aborted).toBe(true);
+    expect(store.getTask(b.id)?.status).toBe('queued');
+  } finally {
+    finish(result);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  expect(calls).toBe(1);
+  expect(store.result(a.id)).toBeNull();
+  expect((await fetch(url + '/api/health')).status).toBe(503);
 });

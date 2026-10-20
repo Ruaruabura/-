@@ -12,6 +12,7 @@ export const reasons: Record<string, string> = {
   unverified: '订阅连接待验证',
   quota: '额度暂不可用',
   input_limit: '材料超过本次范围',
+  output_limit: '回答达到输出上限，部分内容已保留在工作记录',
   request_limit: '已达到请求次数上限',
   timeout: '已达到执行时限',
   interrupted: '上次执行被中断',

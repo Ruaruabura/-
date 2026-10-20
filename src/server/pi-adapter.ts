@@ -239,6 +239,7 @@ export function createPiAdapter(config: Config, dependencies: Dependencies = {})
         .at(-1);
       if (!last || last.stopReason === 'error' || last.stopReason === 'aborted')
         throw normalize(new Error(last?.errorMessage ?? 'execution_failed'));
+      if (last.stopReason === 'length') throw new ExecutionError('output_limit');
       const answer = last.content
         .filter((c) => c.type === 'text')
         .map((c) => c.text)

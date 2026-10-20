@@ -14,7 +14,12 @@ export function createWorkspaceReader(workspace: string, budget: number) {
     const root = await realpath(workspace),
       target = await realpath(resolve(root, path)),
       rel = relative(root, target);
-    if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel))
+    if (
+      rel === '..' ||
+      rel.startsWith(`..${sep}`) ||
+      isAbsolute(rel) ||
+      rel.split(sep).some((part) => part.startsWith('.'))
+    )
       throw new Error('path_denied');
     const file = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {

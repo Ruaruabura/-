@@ -1,4 +1,4 @@
-import type { Store } from './store.js';
+import { isStoreConflict, type Store } from './store.js';
 import type { Task } from '../shared/contracts.js';
 import { ExecutionError, type Adapter, type ErrorCode } from './adapter.js';
 import { createGate } from './gate.js';
@@ -12,12 +12,16 @@ export function createRunner(store: Store, adapter: Adapter) {
     reason: ErrorCode | null;
     done: Promise<void>;
   } | null = null;
+  function recordingFailed() {
+    fatal = 'recording_failed';
+    active?.controller.abort();
+  }
   function persist<T>(operation: () => T): T {
     try {
       return operation();
-    } catch {
-      fatal = 'recording_failed';
-      active?.controller.abort();
+    } catch (error) {
+      if (isStoreConflict(error)) throw error;
+      recordingFailed();
       throw new ExecutionError('recording_failed');
     }
   }
@@ -48,14 +52,21 @@ export function createRunner(store: Store, adapter: Adapter) {
         throw new ExecutionError(
           connection.state === 'unverified' ? 'unverified' : 'auth_required',
         );
-      const text = store.sourceText(task);
+      const text = persist(() => store.sourceText(task));
       if (text.length > task.limits.maxInputChars) throw new ExecutionError('input_limit');
       const result = await adapter.run(task, text, {
         signal: current.controller.signal,
-        history: store.messages(task.conversationId).slice(
-          0,
-          store.messages(task.conversationId).findIndex((m) => m.id === task.sourceMessageId),
-        ),
+        history: persist(() => {
+          const turns = store.tasks(task.conversationId);
+          const earlier = turns.slice(
+            0,
+            turns.findIndex((turn) => turn.id === task.id),
+          );
+          const messages = store.messages(task.conversationId);
+          return earlier.flatMap((turn) =>
+            messages.filter((message) => message.taskId === turn.id),
+          );
+        }),
         beforeRequest() {
           if (current.controller.signal.aborted || fatal)
             throw new ExecutionError(current.reason ?? 'recording_failed');
@@ -69,6 +80,7 @@ export function createRunner(store: Store, adapter: Adapter) {
           persist(() => store.append(task.id, type, payload));
         },
       });
+      if (fatal) return;
       if (current.reason) throw new ExecutionError(current.reason);
       persist(() => store.complete(task.id, result));
     } catch (error) {
@@ -86,7 +98,7 @@ export function createRunner(store: Store, adapter: Adapter) {
   }
   async function pump() {
     while (!stopped && !fatal) {
-      const task = store.queued()[0];
+      const task = persist(() => store.queued())[0];
       if (!task) break;
       await execute(task);
     }
@@ -96,15 +108,21 @@ export function createRunner(store: Store, adapter: Adapter) {
       if (stopped || fatal || pumping) return;
       pumping = pump()
         .catch(() => {
-          fatal = 'recording_failed';
+          recordingFailed();
         })
         .finally(() => {
           pumping = null;
-          if (!stopped && !fatal && store.queued().length) runner.wake();
+          if (!stopped && !fatal) {
+            try {
+              if (persist(() => store.queued()).length) runner.wake();
+            } catch {
+              /* Fatal state is already latched. */
+            }
+          }
         });
     },
     async cancel(id: string) {
-      const task = store.getTask(id);
+      const task = persist(() => store.getTask(id));
       if (!task) throw new Error('not_found');
       if (task.status === 'queued' || task.status === 'paused') {
         persist(() => store.transition(id, [task.status], 'cancelled'));
@@ -125,6 +143,7 @@ export function createRunner(store: Store, adapter: Adapter) {
       persist(() => store.transition(id, ['paused'], 'queued'));
       runner.wake();
     },
+    recordingFailed,
     health() {
       return fatal;
     },
