@@ -37,3 +37,5 @@ HARNESS_SPEECH_MODEL=/path/to/faster-whisper-small
 `npx tsx tests/upload-large.ts` 执行真实 1 GiB 存储验收：256 块，128 块后重建上传实例，继续上传并校验最终摘要。它测试存储层，不等同于浏览器传输 1 GiB。HTTP 分块路径和浏览器发送路径另有小文件集成测试。
 
 后续完整方案仍包括图片缩略图/模型视觉、视频帧与内嵌字幕优先处理、扫描 PDF 页 OCR、可配置语音保留、知识库修订/导出恢复及 MCP。这些能力不会以未实现的状态出现在覆盖范围声明中。
+
+可复用本地运行库安装脚本：`bash scripts/setup-local-tools.sh`，Python 包版本快照在 `requirements/local-speech.lock`。该脚本检查系统工具并安装 OCR 数据，不获取语音模型权重；中文 OCR 下载校验固定 SHA-256，校验失败会停止。
