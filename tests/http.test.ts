@@ -179,3 +179,56 @@ test('HTTP storage failure aborts current execution and latches the queue closed
   expect(store.result(a.id)).toBeNull();
   expect((await fetch(url + '/api/health')).status).toBe(503);
 });
+
+test('upload API checks chunk hashes and prepares only completed originals', async () => {
+  const { Uploads } = await import('../src/server/uploads.js');
+  const { createHash } = await import('node:crypto');
+  const dir = mkdtempSync(join(tmpdir(), 'http-upload-'));
+  await setup();
+  await new Promise<void>((r) => server.close(() => r()));
+  const adapter: Adapter = {
+    status: async () => ({
+      state: 'unconfigured',
+      reason: 'auth_required',
+      verifiedAt: null,
+      remainingQuota: null,
+    }),
+    run: async () => {
+      throw Error();
+    },
+  };
+  server = createServer(store, runner, adapter, { uploads: new Uploads(dir) });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  url = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  try {
+    const init = await post('/api/uploads', { clientId: 'one', name: 'x.txt', size: 3 });
+    expect(init.status).toBe(201);
+    const item = await init.json();
+    const data = Buffer.from('abc'),
+      sha256 = createHash('sha256').update(data).digest('hex');
+    expect((await post(`/api/uploads/${item.id}/prepare`, { start: 1, end: 1 })).status).toBe(400);
+    const put = await fetch(`${url}/api/uploads/${item.id}/chunks/0`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/octet-stream', 'x-chunk-sha256': sha256 },
+      body: data,
+    });
+    expect(put.status).toBe(200);
+    expect((await post(`/api/uploads/${item.id}/complete`, { sha256 })).status).toBe(200);
+    const prepared = await post(`/api/uploads/${item.id}/prepare`, { start: 1, end: 1 });
+    expect(prepared.status).toBe(200);
+    expect((await prepared.json()).text).toBe('abc');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('voice endpoint reports missing local model without pretending to transcribe', async () => {
+  await setup();
+  const response = await fetch(url + '/api/voice', {
+    method: 'POST',
+    headers: { 'content-type': 'audio/webm' },
+    body: Buffer.from('not audio'),
+  });
+  expect(response.status).toBe(400);
+  expect((await response.json()).error.code).toBe('speech_model_missing');
+});

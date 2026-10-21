@@ -94,3 +94,5 @@ npm run format:check
 - `src/web/`：聊天、会话和工作时间线。
 
 [原始完整方案](docs/superpowers/specs/2026-10-21-personal-agent-harness-proposal.md) · [第一阶段设计](docs/superpowers/specs/2026-10-21-harness-phase-one-design.md) · [实施计划](docs/superpowers/plans/2026-10-21-harness-phase-one.md) · [Pi 接入说明](docs/pi-connection.md)
+
+第二阶段已加入分块附件上传、PDF 范围提取、图像 OCR，以及本地语音转写界面。用法、依赖和当前限制见 [本地材料说明](docs/local-materials.md)。语音模型尚未安装成功时，界面会禁用录音，不会转用云服务。

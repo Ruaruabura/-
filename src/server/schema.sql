@@ -6,3 +6,7 @@ CREATE TABLE IF NOT EXISTS results(taskId TEXT PRIMARY KEY REFERENCES tasks(id),
 CREATE INDEX IF NOT EXISTS events_conversation ON events(conversationId,seq);
 CREATE INDEX IF NOT EXISTS tasks_status ON tasks(status,createdAt);
 PRAGMA user_version=1;
+
+CREATE TABLE IF NOT EXISTS task_materials(taskId TEXT PRIMARY KEY REFERENCES tasks(id), data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS prepared_materials(id TEXT PRIMARY KEY, data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS task_transcripts(taskId TEXT PRIMARY KEY REFERENCES tasks(id), text TEXT NOT NULL);

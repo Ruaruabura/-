@@ -1,3 +1,5 @@
+import { Uploads } from './uploads.js';
+import { join } from 'node:path';
 import { mkdir } from 'node:fs/promises';
 import { readConfig } from './config.js';
 import { openStore } from './store.js';
@@ -19,7 +21,10 @@ async function main() {
         v.createServer({ server: { middlewareMode: true }, appType: 'spa' }),
       )
     : null;
-  const server = createServer(store, runner, adapter, { middleware: dev?.middlewares });
+  const server = createServer(store, runner, adapter, {
+    middleware: dev?.middlewares,
+    uploads: new Uploads(join(config.dataDir, 'uploads')),
+  });
   let closing = false;
   async function close() {
     if (closing) return;

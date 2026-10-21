@@ -2,6 +2,8 @@ import type { Event, Message } from '../shared/contracts.js';
 import { reasons, time } from './labels.js';
 import { Icon } from './Icon.js';
 const labels: Record<string, string> = {
+  'voice.transcript': '语音原始转写（编辑前）',
+  'materials.selected': '所选材料与覆盖范围',
   'message.sent': '用户原话',
   'task.queued': '任务已排队',
   'task.running': '开始执行',
@@ -37,6 +39,11 @@ export function Timeline({ events, messages }: { events: Event[]; messages: Mess
             let detail = source?.text;
             if (event.payload.reason)
               detail = reasons[String(event.payload.reason)] ?? String(event.payload.reason);
+            if (event.type === 'voice.transcript') detail = String(event.payload.text);
+            if (event.type === 'materials.selected')
+              detail = (event.payload.materials as { name: string; scope: string; text: string }[])
+                .map((m) => `${m.name} · ${m.scope}\n${m.text}`)
+                .join('\n\n');
             if (event.type === 'visible.progress') detail = String(event.payload.text);
             if (event.type === 'model.request')
               detail = `${event.payload.provider} · ${event.payload.model}`;

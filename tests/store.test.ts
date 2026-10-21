@@ -88,3 +88,20 @@ test('terminal tasks reject completion and cancellation cannot rewrite history',
   ).toThrow('invalid_transition');
   expect(store.messages(c.id)).toHaveLength(1);
 });
+
+test('materials remain separate from original words and affect idempotency', () => {
+  const s = openStore(':memory:');
+  try {
+    const conversationId = s.createConversation().id;
+    const materials = [{ uploadId: 'file', name: 'notes.txt', text: '提取内容', scope: '前十行' }];
+    const task = s.submit({ conversationId, clientId: 'materials', text: '原话', materials });
+    expect(s.sourceText(task)).toBe('原话');
+    expect(s.modelText(task)).toContain('提取内容');
+    expect(s.events(conversationId, 0).some((e) => e.type === 'materials.selected')).toBe(true);
+    expect(() =>
+      s.submit({ conversationId, clientId: 'materials', text: '原话', materials: [] }),
+    ).toThrow('idempotency_conflict');
+  } finally {
+    s.close();
+  }
+});

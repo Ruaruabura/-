@@ -134,3 +134,60 @@ for (const transition of ['reload', 'switch'] as const) {
     await expect(page.locator('main').getByText(text, { exact: true })).toHaveCount(1);
   });
 }
+
+test('choosing attachments stays local until Send and preserves original message', async ({
+  page,
+}) => {
+  await page.goto('/');
+  let uploads = 0;
+  page.on('request', (r) => {
+    if (r.url().includes('/api/uploads') && r.method() === 'POST') uploads++;
+  });
+  await page.getByLabel('添加附件').setInputFiles({
+    name: 'notes.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('附件中的原始材料'),
+  });
+  await expect(page.getByText('notes.txt', { exact: true })).toBeVisible();
+  expect(uploads).toBe(0);
+  await page.getByRole('textbox', { name: '输入消息' }).fill('请整理附件');
+  await page.getByRole('button', { name: '发送消息', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: '输入消息' })).toHaveValue('');
+  expect(uploads).toBeGreaterThan(0);
+  await page.getByRole('button', { name: '工作记录', exact: true }).click();
+  await expect(page.locator('main')).toContainText('附件中的原始材料');
+});
+
+test('voice transcript is editable and never sends itself', async ({ page }) => {
+  await page.route('**/api/capabilities', (r) =>
+    r.fulfill({ json: { speech: true, uploads: true } }),
+  );
+  await page.route('**/api/voice', (r) =>
+    r.fulfill({ json: { id: 'test-transcript', text: '原始转写' } }),
+  );
+  await page.goto('/');
+  await expect(page.getByLabel('选择语音文件')).toBeEnabled();
+  await page
+    .getByLabel('选择语音文件')
+    .setInputFiles({ name: 'voice.webm', mimeType: 'audio/webm', buffer: Buffer.from('fixture') });
+  await expect(page.getByRole('textbox', { name: '输入消息' })).toHaveValue('原始转写');
+  await page.getByRole('textbox', { name: '输入消息' }).fill('编辑后的转写');
+  await expect(page.locator('.chat-message')).toHaveCount(0);
+});
+
+test('reload after failed attachment upload refuses to silently send without files', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page
+    .getByLabel('添加附件')
+    .setInputFiles({ name: 'retry.txt', mimeType: 'text/plain', buffer: Buffer.from('file') });
+  await page.getByRole('textbox', { name: '输入消息' }).fill('有附件的消息');
+  await page.route('**/api/uploads', (r) => r.abort());
+  await page.getByRole('button', { name: '发送消息', exact: true }).click();
+  await expect(page.getByRole('alert')).toBeVisible();
+  await page.reload();
+  await page.getByRole('button', { name: '发送消息', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('重新选择');
+  await expect(page.getByRole('textbox', { name: '输入消息' })).toHaveValue('有附件的消息');
+});

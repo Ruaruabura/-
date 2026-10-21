@@ -76,7 +76,13 @@ export class Store {
         .prepare('SELECT taskId,text FROM messages WHERE conversationId=? AND clientId=?')
         .get(input.conversationId, input.clientId);
       if (existing) {
-        if (existing.text !== input.text) throw new Error('idempotency_conflict');
+        if (
+          existing.text !== input.text ||
+          this.transcript(existing.taskId as string) !== (input.transcript ?? null) ||
+          JSON.stringify(this.materials(existing.taskId as string)) !==
+            JSON.stringify(input.materials ?? [])
+        )
+          throw new Error('idempotency_conflict');
         return this.getTask(existing.taskId as string)!;
       }
       const now = new Date().toISOString(),
@@ -100,6 +106,16 @@ export class Store {
       this.db
         .prepare("UPDATE conversations SET title=? WHERE id=? AND title='新对话'")
         .run(input.text.trim().slice(0, 32), input.conversationId);
+      if (input.materials?.length) {
+        this.db
+          .prepare('INSERT INTO task_materials VALUES(?,?)')
+          .run(id, JSON.stringify(input.materials));
+        this.append(id, 'materials.selected', { materials: input.materials });
+      }
+      if (input.transcript !== undefined) {
+        this.db.prepare('INSERT INTO task_transcripts VALUES(?,?)').run(id, input.transcript);
+        this.append(id, 'voice.transcript', { text: input.transcript });
+      }
       this.append(id, 'message.sent', { messageId });
       this.append(id, 'task.queued', {});
       return this.getTask(id)!;
@@ -119,6 +135,34 @@ export class Store {
       .prepare('SELECT * FROM tasks WHERE conversationId=? ORDER BY rowid')
       .all(conversationId)
       .map((r) => this.task(r)!);
+  }
+  transcript(id: string): string | null {
+    return (
+      (this.db.prepare('SELECT text FROM task_transcripts WHERE taskId=?').get(id)
+        ?.text as string) ?? null
+    );
+  }
+  saveMaterial(material: NonNullable<SubmitInput['materials']>[number]): string {
+    const id = randomUUID();
+    this.db.prepare('INSERT INTO prepared_materials VALUES(?,?)').run(id, JSON.stringify(material));
+    return id;
+  }
+  preparedMaterial(id: string): NonNullable<SubmitInput['materials']>[number] {
+    const row = this.db.prepare('SELECT data FROM prepared_materials WHERE id=?').get(id);
+    if (!row) throw Error('not_found');
+    return JSON.parse(row.data as string);
+  }
+  materials(id: string): NonNullable<SubmitInput['materials']> {
+    const row = this.db.prepare('SELECT data FROM task_materials WHERE taskId=?').get(id);
+    return row ? JSON.parse(row.data as string) : [];
+  }
+  modelText(task: Task): string {
+    return (
+      this.sourceText(task) +
+      this.materials(task.id)
+        .map((m) => `\n\n[附件 ${m.name}；覆盖范围：${m.scope}]\n${m.text}`)
+        .join('')
+    );
   }
   sourceText(task: Task): string {
     return (

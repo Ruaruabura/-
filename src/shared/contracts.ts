@@ -1,7 +1,13 @@
 export type TaskStatus = 'queued' | 'running' | 'paused' | 'failed' | 'completed' | 'cancelled';
 export type Limits = { maxInputChars: number; maxRequests: number; timeoutMs: number };
 export const DEFAULT_LIMITS: Limits = { maxInputChars: 20_000, maxRequests: 3, timeoutMs: 120_000 };
-export type SubmitInput = { conversationId: string; clientId: string; text: string };
+export type SubmitInput = {
+  conversationId: string;
+  clientId: string;
+  text: string;
+  transcript?: string;
+  materials?: { uploadId: string; name: string; text: string; scope: string }[];
+};
 export type Conversation = { id: string; title: string; createdAt: string };
 export type Message = {
   id: string;

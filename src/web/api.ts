@@ -35,8 +35,13 @@ export const api = {
     request<TaskView[]>(`/conversations/${id}/tasks`, { signal }),
   events: (id: string, after: number, signal?: AbortSignal) =>
     request<Event[]>(`/conversations/${id}/events?after=${after}`, { signal }),
-  send: (id: string, clientId: string, text: string) =>
-    post<Task>(`/conversations/${id}/messages`, { clientId, text }),
+  send: (
+    id: string,
+    clientId: string,
+    text: string,
+    materialIds: string[] = [],
+    transcriptId?: string,
+  ) => post<Task>(`/conversations/${id}/messages`, { clientId, text, materialIds, transcriptId }),
   cancel: (id: string) => post<Task>(`/tasks/${id}/cancel`, {}),
   resume: (id: string) => post<Task>(`/tasks/${id}/resume`, {}),
 };

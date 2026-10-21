@@ -52,7 +52,7 @@ export function createRunner(store: Store, adapter: Adapter) {
         throw new ExecutionError(
           connection.state === 'unverified' ? 'unverified' : 'auth_required',
         );
-      const text = persist(() => store.sourceText(task));
+      const text = persist(() => store.modelText(task));
       if (text.length > task.limits.maxInputChars) throw new ExecutionError('input_limit');
       const result = await adapter.run(task, text, {
         signal: current.controller.signal,

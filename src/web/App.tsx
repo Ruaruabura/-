@@ -1,3 +1,5 @@
+import { Voice } from './Voice.js';
+import { uploadFile } from './uploads.js';
 import { useEffect, useRef, useState } from 'react';
 import type { Conversation, ConnectionStatus, Message, Event } from '../shared/contracts.js';
 import { api, type TaskView } from './api.js';
@@ -33,7 +35,19 @@ export function App() {
     [error, setError] = useState(''),
     [pollError, setPollError] = useState(''),
     [version, setVersion] = useState(0);
-  const pending = useRef<{ id: string; text: string; conversationId: string } | null>(null),
+  const [voiceBusy, setVoiceBusy] = useState(false),
+    [transcriptId, setTranscriptId] = useState<string | undefined>();
+  const [requiredFiles, setRequiredFiles] = useState<string[]>([]);
+  const [files, setFiles] = useState<File[]>([]),
+    [uploadProgress, setUploadProgress] = useState('');
+  const [range, setRange] = useState({ start: 1, end: 5 });
+  const pending = useRef<{
+      id: string;
+      text: string;
+      conversationId: string;
+      attachmentKey?: string;
+      materialIds?: string[];
+    } | null>(null),
     input = useRef<HTMLTextAreaElement>(null),
     selectedRef = useRef('');
   function choose(id: string) {
@@ -42,6 +56,14 @@ export function App() {
     saveLocal('harness:selected', id);
     setDraft(readLocal(`harness:draft:${id}`) ?? '');
     setError('');
+    setFiles([]);
+    try {
+      setRequiredFiles(JSON.parse(readLocal(`harness:files:${id}`) ?? '[]'));
+    } catch {
+      setRequiredFiles([]);
+    }
+    setTranscriptId(readLocal(`harness:transcript:${id}`) ?? undefined);
+    setUploadProgress('');
     try {
       const saved = JSON.parse(readLocal(`harness:pending:${id}`) ?? 'null');
       pending.current =
@@ -130,15 +152,25 @@ export function App() {
     }
   }
   async function send() {
-    if (sending || !draft.trim() || !selected) return;
+    if (sending || voiceBusy || !draft.trim() || !selected) return;
+    if (
+      requiredFiles.length &&
+      files.length !== requiredFiles.length &&
+      !pending.current?.materialIds
+    ) {
+      setError('请重新选择原附件以续传，或明确移除附件。');
+      return;
+    }
+    const attachmentKey = JSON.stringify({ files: requiredFiles, range, transcriptId });
     const target = selected,
       text = draft;
     if (
       !pending.current ||
       pending.current.text !== text ||
-      pending.current.conversationId !== target
+      pending.current.conversationId !== target ||
+      pending.current.attachmentKey !== attachmentKey
     )
-      pending.current = { id: crypto.randomUUID(), text, conversationId: target };
+      pending.current = { id: crypto.randomUUID(), text, conversationId: target, attachmentKey };
     if (!saveLocal(`harness:pending:${target}`, JSON.stringify(pending.current))) {
       setError('浏览器无法保存发送凭据，消息尚未发送。请释放本地存储后重试。');
       return;
@@ -146,10 +178,23 @@ export function App() {
     setSending(true);
     setError('');
     try {
-      await api.send(target, pending.current.id, text);
+      const materialIds: string[] = pending.current.materialIds ?? [];
+      if (!pending.current.materialIds)
+        for (const file of files)
+          materialIds.push(await uploadFile(file, range, setUploadProgress));
+      pending.current.materialIds = materialIds;
+      if (!saveLocal(`harness:pending:${target}`, JSON.stringify(pending.current)))
+        throw Error('发送凭据保存失败，尚未提交消息。');
+      await api.send(target, pending.current.id, text, materialIds, transcriptId);
       saveLocal(`harness:pending:${target}`, 'null');
       if (selectedRef.current === target) {
         edit('');
+        setFiles([]);
+        setRequiredFiles([]);
+        saveLocal(`harness:files:${target}`, '[]');
+        setTranscriptId(undefined);
+        saveLocal(`harness:transcript:${target}`, '');
+        setUploadProgress('');
         pending.current = null;
         setVersion((v) => v + 1);
       }
@@ -184,7 +229,7 @@ export function App() {
         <button
           className="new-chat"
           aria-label="新建对话"
-          disabled={creating || sending}
+          disabled={creating || sending || voiceBusy}
           onClick={() => void create()}
         >
           <Icon name="plus" /> 新的工作 <span>↗</span>
@@ -198,7 +243,7 @@ export function App() {
               key={c.id}
               className={selected === c.id ? 'selected' : ''}
               aria-label={`切换对话：${c.title}`}
-              disabled={sending}
+              disabled={sending || voiceBusy}
               onClick={() => choose(c.id)}
             >
               <Icon name="chat" size={16} />
@@ -287,6 +332,103 @@ export function App() {
                     void send();
                   }}
                 >
+                  <Voice
+                    key={selected}
+                    disabled={sending || !selected}
+                    onBusy={setVoiceBusy}
+                    onTranscript={(id, text) => {
+                      setTranscriptId(id);
+                      saveLocal(`harness:transcript:${selected}`, id);
+                      edit(draft ? draft + '\n' + text : text);
+                    }}
+                  />
+                  <div className="attachment-controls">
+                    <label>
+                      添加附件
+                      <input
+                        aria-label="添加附件"
+                        type="file"
+                        multiple
+                        disabled={sending}
+                        onChange={(e) => {
+                          const selected = Array.from(e.target.files ?? []);
+                          if (selected.length > 3) {
+                            setError('每批最多 3 个附件，请先处理样本。');
+                            return;
+                          }
+                          setFiles(selected);
+                          const names = selected.map((f) => `${f.name}:${f.size}`);
+                          setRequiredFiles(names);
+                          saveLocal(`harness:files:${selectedRef.current}`, JSON.stringify(names));
+                          setError('');
+                        }}
+                      />
+                    </label>
+                    {requiredFiles.length > 0 && files.length === 0 && (
+                      <p>
+                        待续传附件：{requiredFiles.join('、')}。请重新选择原文件。
+                        <button
+                          type="button"
+                          disabled={sending}
+                          onClick={() => {
+                            setRequiredFiles([]);
+                            saveLocal(`harness:files:${selected}`, '[]');
+                          }}
+                        >
+                          移除待续传附件
+                        </button>
+                      </p>
+                    )}
+                    {files.map((f, i) => (
+                      <div key={i}>
+                        <strong>{f.name}</strong> · {(f.size / 1024 / 1024).toFixed(1)} MiB{' '}
+                        <button
+                          type="button"
+                          disabled={sending}
+                          onClick={() => {
+                            const next = files.filter((_, j) => i !== j);
+                            setFiles(next);
+                            const names = next.map((f) => `${f.name}:${f.size}`);
+                            setRequiredFiles(names);
+                            saveLocal(`harness:files:${selected}`, JSON.stringify(names));
+                          }}
+                        >
+                          移除
+                        </button>
+                      </div>
+                    ))}
+                    {files.length > 0 && (
+                      <div>
+                        <p>
+                          发送时上传并按以下范围本地提取。文本最多 12,000 字符；图片仅 OCR；PDF 最多
+                          20 页；音视频只转写音轨，最多 600 秒。
+                        </p>
+                        <label>
+                          起始页 / 秒
+                          <input
+                            aria-label="起始页或秒"
+                            type="number"
+                            min="1"
+                            value={range.start}
+                            disabled={sending}
+                            onChange={(e) => setRange({ ...range, start: Number(e.target.value) })}
+                          />
+                        </label>
+                        <label>
+                          结束页 / 秒
+                          <input
+                            aria-label="结束页或秒"
+                            type="number"
+                            min="1"
+                            value={range.end}
+                            disabled={sending}
+                            onChange={(e) => setRange({ ...range, end: Number(e.target.value) })}
+                          />
+                        </label>
+                      </div>
+                    )}
+                    {uploadProgress && <p role="status">{uploadProgress}</p>}
+                  </div>
                   <textarea
                     ref={input}
                     aria-label="输入消息"
@@ -313,7 +455,7 @@ export function App() {
                     <button
                       className="send"
                       aria-label="发送消息"
-                      disabled={sending || !draft.trim() || !selected}
+                      disabled={sending || voiceBusy || !draft.trim() || !selected}
                       type="submit"
                     >
                       {sending ? (
@@ -397,7 +539,7 @@ export function App() {
           <span>
             <Icon name="leaf" size={12} /> 让工作留下脉络
           </span>
-          <span>第一阶段 · 文字与工作记录</span>
+          <span>第二阶段 · 本地材料与工作记录</span>
         </footer>
       </div>
     </div>
