@@ -40,12 +40,14 @@ export function App() {
   const [requiredFiles, setRequiredFiles] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]),
     [uploadProgress, setUploadProgress] = useState('');
+  const [selectionRevision, setSelectionRevision] = useState('');
   const [range, setRange] = useState({ start: 1, end: 5 });
   const pending = useRef<{
       id: string;
       text: string;
       conversationId: string;
       attachmentKey?: string;
+      materialKey?: string;
       materialIds?: string[];
     } | null>(null),
     input = useRef<HTMLTextAreaElement>(null),
@@ -62,7 +64,18 @@ export function App() {
     } catch {
       setRequiredFiles([]);
     }
-    setTranscriptId(readLocal(`harness:transcript:${id}`) ?? undefined);
+    setTranscriptId(readLocal(`harness:transcript:${id}`) || undefined);
+    setSelectionRevision(readLocal(`harness:selection:${id}`) || '');
+    try {
+      const saved = JSON.parse(readLocal(`harness:range:${id}`) ?? 'null');
+      setRange(
+        saved && Number.isInteger(saved.start) && Number.isInteger(saved.end)
+          ? saved
+          : { start: 1, end: 5 },
+      );
+    } catch {
+      setRange({ start: 1, end: 5 });
+    }
     setUploadProgress('');
     try {
       const saved = JSON.parse(readLocal(`harness:pending:${id}`) ?? 'null');
@@ -151,17 +164,29 @@ export function App() {
       setCreating(false);
     }
   }
+  function replaceSelection(next: File[]) {
+    const revision = crypto.randomUUID(),
+      names = next.map((f) => `${f.name}:${f.size}`);
+    setFiles(next);
+    setRequiredFiles(names);
+    setSelectionRevision(revision);
+    saveLocal(`harness:files:${selectedRef.current}`, JSON.stringify(names));
+    saveLocal(`harness:selection:${selectedRef.current}`, revision);
+  }
+  function changeRange(next: { start: number; end: number }) {
+    setRange(next);
+    saveLocal(`harness:range:${selected}`, JSON.stringify(next));
+  }
   async function send() {
     if (sending || voiceBusy || !draft.trim() || !selected) return;
-    if (
-      requiredFiles.length &&
-      files.length !== requiredFiles.length &&
-      !pending.current?.materialIds
-    ) {
+    const materialKey = JSON.stringify({ files: requiredFiles, range, selectionRevision });
+    const reusable =
+      pending.current?.materialKey === materialKey ? pending.current.materialIds : undefined;
+    if (requiredFiles.length && files.length !== requiredFiles.length && !reusable) {
       setError('请重新选择原附件以续传，或明确移除附件。');
       return;
     }
-    const attachmentKey = JSON.stringify({ files: requiredFiles, range, transcriptId });
+    const attachmentKey = JSON.stringify({ materialKey, transcriptId: transcriptId || null });
     const target = selected,
       text = draft;
     if (
@@ -170,7 +195,14 @@ export function App() {
       pending.current.conversationId !== target ||
       pending.current.attachmentKey !== attachmentKey
     )
-      pending.current = { id: crypto.randomUUID(), text, conversationId: target, attachmentKey };
+      pending.current = {
+        id: crypto.randomUUID(),
+        text,
+        conversationId: target,
+        attachmentKey,
+        materialKey,
+        materialIds: reusable,
+      };
     if (!saveLocal(`harness:pending:${target}`, JSON.stringify(pending.current))) {
       setError('浏览器无法保存发送凭据，消息尚未发送。请释放本地存储后重试。');
       return;
@@ -356,10 +388,7 @@ export function App() {
                             setError('每批最多 3 个附件，请先处理样本。');
                             return;
                           }
-                          setFiles(selected);
-                          const names = selected.map((f) => `${f.name}:${f.size}`);
-                          setRequiredFiles(names);
-                          saveLocal(`harness:files:${selectedRef.current}`, JSON.stringify(names));
+                          replaceSelection(selected);
                           setError('');
                         }}
                       />
@@ -371,8 +400,7 @@ export function App() {
                           type="button"
                           disabled={sending}
                           onClick={() => {
-                            setRequiredFiles([]);
-                            saveLocal(`harness:files:${selected}`, '[]');
+                            replaceSelection([]);
                           }}
                         >
                           移除待续传附件
@@ -387,10 +415,7 @@ export function App() {
                           disabled={sending}
                           onClick={() => {
                             const next = files.filter((_, j) => i !== j);
-                            setFiles(next);
-                            const names = next.map((f) => `${f.name}:${f.size}`);
-                            setRequiredFiles(names);
-                            saveLocal(`harness:files:${selected}`, JSON.stringify(names));
+                            replaceSelection(next);
                           }}
                         >
                           移除
@@ -411,7 +436,9 @@ export function App() {
                             min="1"
                             value={range.start}
                             disabled={sending}
-                            onChange={(e) => setRange({ ...range, start: Number(e.target.value) })}
+                            onChange={(e) =>
+                              changeRange({ ...range, start: Number(e.target.value) })
+                            }
                           />
                         </label>
                         <label>
@@ -422,7 +449,7 @@ export function App() {
                             min="1"
                             value={range.end}
                             disabled={sending}
-                            onChange={(e) => setRange({ ...range, end: Number(e.target.value) })}
+                            onChange={(e) => changeRange({ ...range, end: Number(e.target.value) })}
                           />
                         </label>
                       </div>

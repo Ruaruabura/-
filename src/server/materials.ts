@@ -137,8 +137,9 @@ export async function transcribeVoice(bytes: Buffer): Promise<string> {
   if (!(await speechAvailable())) throw Error('speech_model_missing');
   if (busy) throw Error('processing_busy');
   busy = true;
-  const dir = await mkdtemp(join(tmpdir(), 'harness-voice-'));
+  let dir: string | undefined;
   try {
+    dir = await mkdtemp(join(tmpdir(), 'harness-voice-'));
     const path = join(dir, 'recording');
     const file = await open(path, 'w', 0o600);
     try {
@@ -166,7 +167,10 @@ export async function transcribeVoice(bytes: Buffer): Promise<string> {
     if (text.length > 12000) throw Error('voice_too_long');
     return text;
   } finally {
-    await rm(dir, { recursive: true, force: true });
-    busy = false;
+    try {
+      if (dir) await rm(dir, { recursive: true, force: true });
+    } finally {
+      busy = false;
+    }
   }
 }

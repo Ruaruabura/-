@@ -271,8 +271,9 @@ export function createServer(
               database(() => store.preparedMaterial(id)),
             );
             if (
+              materials.length > 0 &&
               materials.reduce((n, m) => n + m.text.length, 0) + (data.text as string).length >
-              18000
+                18000
             )
               throw new HttpError(400, 'material_budget');
             if (data.transcriptId !== undefined && typeof data.transcriptId !== 'string')

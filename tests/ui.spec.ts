@@ -191,3 +191,77 @@ test('reload after failed attachment upload refuses to silently send without fil
   await expect(page.getByRole('alert')).toContainText('重新选择');
   await expect(page.getByRole('textbox', { name: '输入消息' })).toHaveValue('有附件的消息');
 });
+
+for (const variant of ['edit-text', 'replace-file', 'reload-range'] as const) {
+  test(`attachment retry keeps intended material: ${variant}`, async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: '新建对话', exact: true }).click();
+    const requests: { clientId: string; materialIds: string[] }[] = [];
+    let first = true;
+    await page.route('**/api/conversations/*/messages', async (route) => {
+      if (route.request().method() !== 'POST') return route.continue();
+      requests.push(route.request().postDataJSON());
+      if (first) {
+        first = false;
+        await route.fetch();
+        return route.abort();
+      }
+      return route.continue();
+    });
+    await page
+      .getByLabel('添加附件')
+      .setInputFiles({ name: 'same.txt', mimeType: 'text/plain', buffer: Buffer.from('OLD') });
+    if (variant === 'reload-range') await page.getByLabel('结束页或秒').fill('2');
+    const input = page.getByRole('textbox', { name: '输入消息' });
+    await input.fill('附件请求');
+    await page.getByRole('button', { name: '发送消息', exact: true }).click();
+    await expect(page.getByRole('alert')).toBeVisible();
+    if (variant === 'replace-file') {
+      await page
+        .getByLabel('添加附件')
+        .setInputFiles({ name: 'same.txt', mimeType: 'text/plain', buffer: Buffer.from('NEW') });
+    } else {
+      await page.reload();
+      if (variant === 'edit-text') await input.fill('修改后的附件请求');
+    }
+    await page.getByRole('button', { name: '发送消息', exact: true }).click();
+    await expect(input).toHaveValue('');
+    expect(requests).toHaveLength(2);
+    expect(requests[1].materialIds).toHaveLength(1);
+    if (variant === 'replace-file')
+      expect(requests[1].materialIds).not.toEqual(requests[0].materialIds);
+    else expect(requests[1].materialIds).toEqual(requests[0].materialIds);
+    if (variant === 'reload-range') expect(requests[1].clientId).toBe(requests[0].clientId);
+  });
+}
+
+test('text retry after an earlier successful send survives reload without duplication', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '新建对话', exact: true }).click();
+  const input = page.getByRole('textbox', { name: '输入消息' });
+  await input.fill('先成功一条');
+  await page.getByRole('button', { name: '发送消息', exact: true }).click();
+  await expect(input).toHaveValue('');
+  const ids: string[] = [];
+  let first = true;
+  await page.route('**/api/conversations/*/messages', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    ids.push(route.request().postDataJSON().clientId);
+    if (first) {
+      first = false;
+      await route.fetch();
+      return route.abort();
+    }
+    return route.continue();
+  });
+  await input.fill('不应重复的第二条');
+  await page.getByRole('button', { name: '发送消息', exact: true }).click();
+  await expect(page.getByRole('alert')).toBeVisible();
+  await page.reload();
+  await page.getByRole('button', { name: '发送消息', exact: true }).click();
+  await expect(input).toHaveValue('');
+  expect(ids[1]).toBe(ids[0]);
+  await expect(page.locator('main').getByText('不应重复的第二条', { exact: true })).toHaveCount(1);
+});

@@ -1,8 +1,8 @@
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, test } from 'vitest';
-import { extractMaterial } from '../src/server/materials.js';
+import { expect, test, vi } from 'vitest';
+import { extractMaterial, transcribeVoice } from '../src/server/materials.js';
 test('text extraction is bounded and reports actual coverage', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'material-'));
   try {
@@ -58,6 +58,25 @@ test('PDF extraction reports the actual page range and rejects pages beyond the 
       'invalid_range',
     );
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('temporary-directory failure does not lock all later preprocessing', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'voice-temp-'));
+  try {
+    writeFileSync(join(dir, 'model.bin'), '');
+    writeFileSync(join(dir, 'text'), 'still works');
+    vi.stubEnv('HARNESS_SPEECH_MODEL', dir);
+    vi.stubEnv('HARNESS_SPEECH_PYTHON', process.execPath);
+    vi.stubEnv('TMPDIR', join(dir, 'missing', 'temporary'));
+    await expect(transcribeVoice(Buffer.from('voice'))).rejects.toThrow();
+    vi.unstubAllEnvs();
+    expect((await extractMaterial(join(dir, 'text'), 'text.txt', { start: 1, end: 1 })).text).toBe(
+      'still works',
+    );
+  } finally {
+    vi.unstubAllEnvs();
     rmSync(dir, { recursive: true, force: true });
   }
 });

@@ -232,3 +232,16 @@ test('voice endpoint reports missing local model without pretending to transcrib
   expect(response.status).toBe(400);
   expect((await response.json()).error.code).toBe('speech_model_missing');
 });
+
+test('plain text retains the advertised 20000-character capacity', async () => {
+  await setup();
+  const c = store.createConversation();
+  expect(
+    (
+      await post(`/api/conversations/${c.id}/messages`, {
+        clientId: 'long-plain',
+        text: 'a'.repeat(19000),
+      })
+    ).status,
+  ).toBe(201);
+});
